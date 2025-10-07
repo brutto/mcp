@@ -9,14 +9,49 @@ use AntonBrutto\McpServer\Prompts\ReleaseNotesPrompt;
 use AntonBrutto\McpServer\Resources\FsResource;
 use AntonBrutto\McpTransportStdio\StdioTransport;
 
-$reg = new Registry();
-$reg->addTool(new EchoTool());
-$reg->addPrompt(new ReleaseNotesPrompt());
-$reg->addResource(new FsResource(__DIR__.'/../'));
+$registry = new Registry();
+$registry->addTool(new EchoTool());
+$registry->addPrompt(new ReleaseNotesPrompt());
+$registry->addResource(new FsResource(__DIR__.'/../'));
 
-$server = new Server($reg);
+$server = new Server($registry);
 $transport = new StdioTransport();
 $transport->open();
-foreach ($transport->incoming() as $msg) {
-    if ($resp = $server->handle($msg)) { $transport->send($resp); }
+
+$running = true;
+$shutdown = static function () use (&$running, $transport): void {
+    if (!$running) {
+        return;
+    }
+    $running = false;
+    $transport->close();
+};
+
+$signalSupport = false;
+if (function_exists('pcntl_async_signals')) {
+    pcntl_async_signals(true);
+    pcntl_signal(SIGTERM, $shutdown);
+    pcntl_signal(SIGINT, $shutdown);
+    $signalSupport = true;
+} elseif (function_exists('pcntl_signal')) {
+    pcntl_signal(SIGTERM, $shutdown);
+    pcntl_signal(SIGINT, $shutdown);
+    $signalSupport = true;
+}
+
+try {
+    foreach ($transport->incoming() as $msg) {
+        if (!$running) {
+            break;
+        }
+        if ($signalSupport && function_exists('pcntl_signal_dispatch')) {
+            pcntl_signal_dispatch();
+        }
+        $resp = $server->handle($msg);
+        if ($resp) {
+            $transport->send($resp);
+        }
+    }
+} finally {
+    $shutdown();
 }

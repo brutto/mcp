@@ -22,22 +22,21 @@ docker run --rm \
   composer install --no-interaction --prefer-dist --optimize-autoloader
 ```
 
+Stdio run example
 ```bash
-php examples/stdio-echo-server.php | php examples/stdio-echo-client.php
+docker run --rm -i \                                                                                  127 ↵
+  -v "$PWD":/work -w /work \
+  php:8.4-cli php examples/stdio-echo-server.php
 ```
 
 ## License
 MIT
 
-
-## Initialize as a Git repo & push
+## MCP Inspector
 
 ```bash
-git init
-git add .
-git commit -m "chore: bootstrap PHP MCP monorepo"
-# set your repo URL:
-git remote add origin <YOUR_REPO_URL>
-git branch -M main
-git push -u origin main
+docker run --rm \
+  -e HOST=0.0.0.0 -e DANGEROUSLY_OMIT_AUTH=true \
+  -p 6274:6274 -p 6277:6277 \
+  ghcr.io/modelcontextprotocol/inspector:latest
 ```

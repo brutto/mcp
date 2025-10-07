@@ -117,7 +117,7 @@ final class Server
             $this->cache->save($cacheItem);
         }
 
-        return new JsonRpcMessage($msg->id, 'tools/call', [], ['result' => $res]);
+        return new JsonRpcMessage($msg->id, 'tools/call', [], $res);
     }
 
     private function promptsList(JsonRpcMessage $msg): JsonRpcMessage

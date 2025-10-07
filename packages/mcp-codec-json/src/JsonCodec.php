@@ -28,7 +28,12 @@ final class JsonCodec
     public static function decode(string $json): JsonRpcMessage
     {
         $d = json_decode($json, true);
-        return new JsonRpcMessage($d['id'] ?? null, $d['method'] ?? '', $d['params'] ?? [], $d['result'] ?? null,
-            $d['error'] ?? null);
+        return new JsonRpcMessage(
+            $d['id'] ?? null,
+            $d['method'] ?? '',
+            $d['params'] ?? [],
+            $d['result'] ?? null,
+            $d['error'] ?? null
+        );
     }
 }

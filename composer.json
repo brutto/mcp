@@ -4,6 +4,8 @@
   "type": "project",
   "license": "MIT",
   "require": {
+    "ext-json": "*",
+    "ext-pcntl" : "*",
     "php": "^8.4",
     "psr/log": "^3.0",
     "psr/container": "^2.0",

@@ -15,12 +15,24 @@ final class StdioTransport implements TransportInterface
 
     public function __construct($in = null, $out = null)
     {
-        $this->in = $in ?? fopen('php://stdin', 'r');
-        $this->out = $out ?? fopen('php://stdout', 'w');
+        $this->in = $in;
+        $this->out = $out;
     }
 
     public function open(): void
     {
+        if ($this->open) {
+            return;
+        }
+
+        if (!is_resource($this->in)) {
+            $this->in = fopen('php://stdin', 'r');
+        }
+
+        if (!is_resource($this->out)) {
+            $this->out = fopen('php://stdout', 'w');
+        }
+
         $this->open = true;
     }
 
@@ -41,7 +53,7 @@ final class StdioTransport implements TransportInterface
     {
         $this->ensureOpen();
 
-        while (!feof($this->in)) {
+        while ($this->open && is_resource($this->in) && !feof($this->in)) {
             $line = fgets($this->in);
             if ($line === false) {
                 break;
@@ -58,13 +70,22 @@ final class StdioTransport implements TransportInterface
 
     public function close(): void
     {
+        if (!$this->open) {
+            return;
+        }
+
         $this->open = false;
+
         if (is_resource($this->in)) {
             fclose($this->in);
         }
         if (is_resource($this->out)) {
+            fflush($this->out);
             fclose($this->out);
         }
+
+        $this->in = null;
+        $this->out = null;
     }
 
     private function ensureOpen(): void
@@ -76,6 +97,10 @@ final class StdioTransport implements TransportInterface
 
     private function write(JsonRpcMessage $msg): void
     {
+        if (!is_resource($this->out)) {
+            return;
+        }
+
         fwrite($this->out, JsonCodec::encode($msg) . "\n");
         fflush($this->out);
     }
