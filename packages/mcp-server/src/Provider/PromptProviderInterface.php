@@ -11,4 +11,7 @@ interface PromptProviderInterface
 
     /** Для prompts/get */
     public function getPrompt(string $name, array $args = []): array; // ['content' => '...', 'meta'=>...]
+
+    /** Возвращает JSON Schema (draft-07) для аргументов указанного промпта. */
+    public function argumentsSchema(string $name): ?array;
 }

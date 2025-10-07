@@ -39,4 +39,20 @@ final class ReleaseNotesPrompt implements PromptProviderInterface
             'meta'    => ['format' => 'text/plain'],
         ];
     }
+
+    public function argumentsSchema(string $name): ?array
+    {
+        if ($name !== 'release_notes') {
+            return null;
+        }
+
+        return [
+            'type'       => 'object',
+            'properties' => [
+                'version' => ['type' => 'string'],
+                'changes' => ['type' => 'array', 'items' => ['type' => 'string']],
+            ],
+            'required'   => ['version', 'changes'],
+        ];
+    }
 }

@@ -32,5 +32,16 @@ final class EchoTool implements ToolProviderInterface
     {
         return ['echo' => (string)($args['text'] ?? '')];
     }
-}
 
+    public function resultSchema(): ?array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'echo' => ['type' => 'string'],
+            ],
+            'required' => ['echo'],
+            'additionalProperties' => false,
+        ];
+    }
+}

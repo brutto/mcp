@@ -15,5 +15,7 @@ interface ToolProviderInterface
 
     /** Выполнить инструмент; вернуть произвольный массив (будет сериализован в JSON) */
     public function invoke(array $args): array;
-}
 
+    /** JSON Schema (draft-07) описывающая структуру result (опционально). */
+    public function resultSchema(): ?array;
+}

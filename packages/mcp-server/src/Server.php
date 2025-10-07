@@ -7,6 +7,9 @@ namespace AntonBrutto\McpServer;
 use AntonBrutto\McpCore\JsonRpcMessage;
 use AntonBrutto\McpServer\Cache\InMemoryCachePool;
 use AntonBrutto\McpServer\Provider\ToolProviderInterface;
+use AntonBrutto\McpServer\Validation\NullSchemaValidator;
+use AntonBrutto\McpServer\Validation\SchemaValidationException;
+use AntonBrutto\McpServer\Validation\SchemaValidatorInterface;
 use Psr\Cache\CacheItemInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Log\LoggerInterface;
@@ -18,9 +21,11 @@ final class Server
     public function __construct(
         private readonly Registry $registry,
         private ?CacheItemPoolInterface $cache = null,
+        private ?SchemaValidatorInterface $validator = null,
         private ?LoggerInterface $logger = null,
     ) {
         $this->cache = $cache ?? new InMemoryCachePool();
+        $this->validator = $validator ?? new NullSchemaValidator();
         $this->logger = $logger ?? new NullLogger();
     }
 
@@ -89,7 +94,23 @@ final class Server
         $toolArgs = $args;
         unset($toolArgs['idempotencyKey']);
 
-        $res = $tool->invoke($toolArgs);
+        try {
+            $this->validatePayload($tool->parametersSchema(), $toolArgs, sprintf('%s.arguments', $name));
+        } catch (SchemaValidationException $e) {
+            return $this->validationError($msg->id, 'tools/call', 'tool', $name, $e);
+        }
+
+        try {
+            $res = $tool->invoke($toolArgs);
+        } catch (SchemaValidationException $e) {
+            return $this->validationError($msg->id, 'tools/call', 'tool', $name, $e);
+        }
+
+        try {
+            $this->validatePayload($tool->resultSchema(), $res, sprintf('%s.result', $name));
+        } catch (SchemaValidationException $e) {
+            return $this->validationError($msg->id, 'tools/call', 'tool', $name, $e);
+        }
 
         if ($cacheItem !== null) {
             $cacheItem->set($res);
@@ -112,10 +133,29 @@ final class Server
     {
         $name = $msg->params['name'] ?? '';
         $args = $msg->params['arguments'] ?? [];
-        foreach ($this->registry->prompts as $p) {
-            $def = array_filter($p->listPrompts(), fn($d) => $d['name'] === $name);
-            if ($def) {
-                return new JsonRpcMessage($msg->id, 'prompts/get', [], $p->getPrompt($name, $args));
+        foreach ($this->registry->prompts as $provider) {
+            $definitions = array_filter($provider->listPrompts(), fn($d) => $d['name'] === $name);
+            if (!$definitions) {
+                continue;
+            }
+
+            $schema = $provider->argumentsSchema($name);
+            if ($schema === null && $definitions) {
+                $schema = $definitions[array_key_first($definitions)]['arguments'] ?? null;
+            }
+
+            try {
+                $this->validatePayload($schema, $args, sprintf('%s.arguments', $name));
+            } catch (SchemaValidationException $e) {
+                return $this->validationError($msg->id, 'prompts/get', 'prompt', $name, $e);
+            }
+
+            try {
+                return new JsonRpcMessage($msg->id, 'prompts/get', [], $provider->getPrompt($name, $args));
+            } catch (SchemaValidationException $e) {
+                return $this->validationError($msg->id, 'prompts/get', 'prompt', $name, $e);
+            } catch (\InvalidArgumentException $e) {
+                continue;
             }
         }
         return new JsonRpcMessage($msg->id, 'prompts/get', [], null,
@@ -156,5 +196,36 @@ final class Server
     private function cacheKey(string $tool, string $key): string
     {
         return sprintf('tool:%s:%s', $tool, $key);
+    }
+
+    private function validatePayload(?array $schema, mixed $payload, string $context): void
+    {
+        if ($schema === null || $schema === []) {
+            return;
+        }
+
+        try {
+            $this->validator->validate($schema, $payload, $context);
+        } catch (SchemaValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            throw new SchemaValidationException($context, $e->getMessage());
+        }
+    }
+
+    private function validationError(?string $id, string $method, string $subjectType, string $subjectName, SchemaValidationException $e): JsonRpcMessage
+    {
+        $this->logger->warning('Payload failed validation', [
+            'subjectType' => $subjectType,
+            'subjectName' => $subjectName,
+            'context' => $e->context,
+            'error' => $e->getMessage(),
+        ]);
+
+        return new JsonRpcMessage($id, $method, [], null, [
+            'code' => 422,
+            'message' => sprintf('Payload validation failed: %s', $e->getMessage()),
+            'data' => ['context' => $e->context, 'subjectType' => $subjectType, 'subjectName' => $subjectName],
+        ]);
     }
 }
