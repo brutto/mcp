@@ -1,0 +1,15 @@
+{
+  "name": "antonbrutto/mcp-core",
+  "description": "mcp-core package of the PHP MCP monorepo",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "psr/log": "^3.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "AntonBrutto\\Mcpcore\\": "src/"
+    }
+  }
+}

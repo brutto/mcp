@@ -1,0 +1,16 @@
+{
+  "name": "antonbrutto/mcp-transport-stdio",
+  "description": "mcp-transport-stdio package of the PHP MCP monorepo",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "antonbrutto/mcp-core": "*",
+    "antonbrutto/mcp-codec-json": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "AntonBrutto\\Mcptransportstdio\\": "src/"
+    }
+  }
+}

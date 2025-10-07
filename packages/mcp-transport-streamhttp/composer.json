@@ -1,0 +1,18 @@
+{
+  "name": "antonbrutto/mcp-transport-streamhttp",
+  "description": "mcp-transport-streamhttp package of the PHP MCP monorepo",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "antonbrutto/mcp-core": "*",
+    "antonbrutto/mcp-codec-json": "*",
+    "psr/http-client": "^1.0",
+    "psr/http-message": "^2.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "AntonBrutto\\Mcptransportstreamhttp\\": "src/"
+    }
+  }
+}

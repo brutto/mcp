@@ -1,0 +1,56 @@
+{
+  "name": "antonbrutto/php-mcp-monorepo",
+  "description": "Framework-agnostic MCP client & server for PHP (monorepo).",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": "^8.3",
+    "psr/log": "^3.0",
+    "psr/container": "^2.0",
+    "psr/http-message": "^2.0",
+    "psr/http-client": "^1.0",
+    "psr/event-dispatcher": "^1.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^12.0",
+    "friendsofphp/php-cs-fixer": "^3.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "AntonBrutto\\McpCore\\": "packages/mcp-core/src/",
+      "AntonBrutto\\McpClient\\": "packages/mcp-client/src/",
+      "AntonBrutto\\McpServer\\": "packages/mcp-server/src/",
+      "AntonBrutto\\McpTransportStdio\\": "packages/mcp-transport-stdio/src/",
+      "AntonBrutto\\McpTransportStreamHttp\\": "packages/mcp-transport-streamhttp/src/",
+      "AntonBrutto\\McpCodecJson\\": "packages/mcp-codec-json/src/"
+    }
+  },
+  "repositories": [
+    {
+      "type": "path",
+      "url": "packages/mcp-core"
+    },
+    {
+      "type": "path",
+      "url": "packages/mcp-client"
+    },
+    {
+      "type": "path",
+      "url": "packages/mcp-server"
+    },
+    {
+      "type": "path",
+      "url": "packages/mcp-transport-stdio"
+    },
+    {
+      "type": "path",
+      "url": "packages/mcp-transport-streamhttp"
+    },
+    {
+      "type": "path",
+      "url": "packages/mcp-codec-json"
+    }
+  ],
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}

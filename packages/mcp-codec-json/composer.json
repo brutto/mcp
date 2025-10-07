@@ -1,0 +1,15 @@
+{
+  "name": "antonbrutto/mcp-codec-json",
+  "description": "mcp-codec-json package of the PHP MCP monorepo",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "antonbrutto/mcp-core": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "AntonBrutto\\Mcpcodecjson\\": "src/"
+    }
+  }
+}
