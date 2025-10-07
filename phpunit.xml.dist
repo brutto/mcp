@@ -13,5 +13,8 @@
         <testsuite name="mcp-server">
             <directory>./packages/mcp-server/tests</directory>
         </testsuite>
+        <testsuite name="mcp-transport-streamhttp">
+            <directory>./packages/mcp-transport-streamhttp/tests</directory>
+        </testsuite>
     </testsuites>
 </phpunit>

@@ -1,21 +1,51 @@
 <?php
 declare(strict_types=1);
+
 namespace AntonBrutto\McpClient;
-use AntonBrutto\McpCore\{ProtocolClientInterface, TransportInterface, JsonRpcMessage, Capabilities};
+
+use AntonBrutto\McpClient\Internal\Deferred;
+use AntonBrutto\McpCore\{Capabilities,
+    CancellationException,
+    CancellationToken,
+    JsonRpcMessage,
+    ProtocolClientInterface,
+    TransportInterface
+};
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use RuntimeException;
-final class McpClient implements ProtocolClientInterface {
+
+final class McpClient implements ProtocolClientInterface
+{
     private int $nextId = 1;
+
+    /** @var array<string, Deferred> */
+    private array $requests = [];
+
     /** @var array<string, JsonRpcMessage> */
     private array $pending = [];
-    public function __construct(private TransportInterface $transport) {}
-    public function init(Capabilities $want): Capabilities {
-        $result = $this->request('mcp.init', ['capabilities' => [
-            'tools' => $want->tools,
-            'resources' => $want->resources,
-            'prompts' => $want->prompts,
-            'notifications' => $want->notifications,
-        ]]);
+
+    public function __construct(private TransportInterface $transport, private ?LoggerInterface $logger = null)
+    {
+        $this->logger = $logger ?? new NullLogger();
+    }
+
+    public function init(
+        Capabilities $want,
+        ?CancellationToken $cancel = null,
+        ?float $timeoutSeconds = null
+    ): Capabilities {
+        $result = $this->request('mcp.init', [
+            'capabilities' => [
+                'tools'         => $want->tools,
+                'resources'     => $want->resources,
+                'prompts'       => $want->prompts,
+                'notifications' => $want->notifications,
+            ],
+        ], $cancel, $timeoutSeconds);
+
         $caps = $result['capabilities'] ?? [];
+
         return new Capabilities(
             (bool)($caps['tools'] ?? false),
             (bool)($caps['resources'] ?? false),
@@ -23,61 +53,197 @@ final class McpClient implements ProtocolClientInterface {
             (bool)($caps['notifications'] ?? false)
         );
     }
-    public function listTools(): array {
-        $result = $this->request('tools/list');
+
+    public function listTools(?CancellationToken $cancel = null, ?float $timeoutSeconds = null): array
+    {
+        $result = $this->request('tools/list', [], $cancel, $timeoutSeconds);
+
         return $result['tools'] ?? [];
     }
-    public function callTool(string $name, array $args): array {
-        $result = $this->request('tools/call', ['name' => $name, 'arguments' => $args]);
+
+    public function callTool(
+        string $name,
+        array $args,
+        ?CancellationToken $cancel = null,
+        ?float $timeoutSeconds = null
+    ): array {
+        $idempotencyKey = $args['idempotencyKey'] ?? $this->nextIdempotencyKey();
+        $enrichedArgs = ['idempotencyKey' => $idempotencyKey] + $args;
+
+        $this->logger->info('Calling tool', [
+            'tool'           => $name,
+            'idempotencyKey' => $idempotencyKey,
+            'arguments'      => $args,
+        ]);
+
+        $result = $this->request(
+            'tools/call',
+            ['name' => $name, 'arguments' => $enrichedArgs],
+            $cancel,
+            $timeoutSeconds
+        );
+
+        $this->logger->info('Tool call completed', [
+            'tool'           => $name,
+            'idempotencyKey' => $idempotencyKey,
+            'result'         => $result,
+        ]);
+
         return $result;
     }
-    public function listPrompts(): array {
-        $result = $this->request('prompts/list');
+
+    public function listPrompts(?CancellationToken $cancel = null, ?float $timeoutSeconds = null): array
+    {
+        $result = $this->request('prompts/list', [], $cancel, $timeoutSeconds);
+
         return $result['prompts'] ?? [];
     }
-    public function getPrompt(string $name, array $args = []): array {
-        $result = $this->request('prompts/get', ['name' => $name, 'arguments' => $args]);
-        return $result;
+
+    public function getPrompt(
+        string $name,
+        array $args = [],
+        ?CancellationToken $cancel = null,
+        ?float $timeoutSeconds = null
+    ): array {
+        return $this->request('prompts/get', ['name' => $name, 'arguments' => $args], $cancel, $timeoutSeconds);
     }
-    public function listResources(): array {
-        $result = $this->request('resources/list');
+
+    public function listResources(?CancellationToken $cancel = null, ?float $timeoutSeconds = null): array
+    {
+        $result = $this->request('resources/list', [], $cancel, $timeoutSeconds);
+
         return $result['resources'] ?? [];
     }
-    public function readResource(string $uri): array {
-        $result = $this->request('resources/read', ['uri' => $uri]);
-        return $result;
+
+    public function readResource(string $uri, ?CancellationToken $cancel = null, ?float $timeoutSeconds = null): array
+    {
+        return $this->request('resources/read', ['uri' => $uri], $cancel, $timeoutSeconds);
     }
-    private function nextId(): string {
+
+    private function nextId(): string
+    {
         return (string)$this->nextId++;
     }
-    private function request(string $method, array $params = []): array {
+
+    /**
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
+    private function request(
+        string $method,
+        array $params = [],
+        ?CancellationToken $cancel = null,
+        ?float $timeoutSeconds = null
+    ): array {
         $id = $this->nextId();
+
+        if ($cancel?->isCancelled()) {
+            throw new CancellationException(sprintf('Request %s was cancelled before send.', $method));
+        }
+
+        $deadline = $timeoutSeconds !== null ? microtime(true) + $timeoutSeconds : null;
+
+        $deferred = new Deferred(
+            $id,
+            $method,
+            $cancel,
+            $deadline,
+            fn() => $this->cancelRequest($id, $method)
+        );
+        $this->requests[$id] = $deferred;
+
+        if (isset($this->pending[$id])) {
+            $deferred->resolve($this->pending[$id]);
+            unset($this->pending[$id]);
+        }
+
         $this->transport->send(new JsonRpcMessage($id, $method, $params));
-        $response = $this->awaitResponse($id);
+
+        try {
+            $response = $this->await($deferred);
+        } finally {
+            unset($this->requests[$id]);
+        }
+
         if ($response->error !== null) {
             $message = $response->error['message'] ?? 'Unknown error';
             $code = $response->error['code'] ?? 0;
+
             throw new RuntimeException("{$method} failed with {$message} ({$code})");
         }
+
         return $response->result ?? [];
     }
-    private function awaitResponse(string $id): JsonRpcMessage {
-        if (isset($this->pending[$id])) {
-            $msg = $this->pending[$id];
-            unset($this->pending[$id]);
-            return $msg;
-        }
-        foreach ($this->transport->incoming() as $message) {
-            if ($message->id === null) {
-                $this->handleNotification($message);
-                continue;
+
+    private function await(Deferred $deferred): JsonRpcMessage
+    {
+        while (true) {
+            $deferred->guard();
+
+            if ($deferred->isSettled()) {
+                return $deferred->message();
             }
-            if ($message->id === $id) {
-                return $message;
+
+            $processed = $this->pumpIncoming($deferred);
+
+            if (!$processed && !$deferred->isSettled()) {
+                // Avoid busy loop while still polling for incoming messages.
+                usleep(5_000);
             }
-            $this->pending[$message->id] = $message;
         }
-        throw new RuntimeException('Transport closed before receiving response for request ' . $id);
     }
-    private function handleNotification(JsonRpcMessage $message): void {}
+
+    private function pumpIncoming(Deferred $target): bool
+    {
+        $processed = false;
+
+        foreach ($this->transport->incoming() as $message) {
+            $processed = true;
+            $this->dispatch($message);
+
+            if ($target->isSettled()) {
+                break;
+            }
+        }
+
+        if (!$processed && !$target->isSettled()) {
+            // No message received; treat as transport closed if there are no active requests.
+            if (empty($this->requests)) {
+                $target->reject(new RuntimeException('Transport closed before receiving any response.'));
+            }
+        }
+
+        return $processed;
+    }
+
+    private function dispatch(JsonRpcMessage $message): void
+    {
+        if ($message->id === null) {
+            $this->handleNotification($message);
+
+            return;
+        }
+
+        if (isset($this->requests[$message->id])) {
+            $this->requests[$message->id]->resolve($message);
+
+            return;
+        }
+
+        $this->pending[$message->id] = $message;
+    }
+
+    private function handleNotification(JsonRpcMessage $message): void
+    {
+    }
+
+    private function cancelRequest(string $id, string $method): void
+    {
+        $this->transport->cancel($id, $method);
+    }
+
+    private function nextIdempotencyKey(): string
+    {
+        return bin2hex(random_bytes(16));
+    }
 }

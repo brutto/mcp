@@ -150,3 +150,27 @@ Transport fakes: in-memory двунаправленный pipe для детер
 Compat-matrix: stdio + streamable HTTP; бенчмарк latency/throughput.
 
 Прогон против существующего клиента (php-mcp/client) как reference.
+
+# Code-style and standards
+
+- Все создаваемые файлы идут обязательно с док-секцией, у каждого метода тоже она должна быть заполнена
+- Use always unbracketed namespace styles
+- 
+# Структура tools
+
+```php
+packages/
+  mcp-server/
+    src/
+      Provider/
+        ToolProviderInterface.php
+        PromptProviderInterface.php
+        ResourceProviderInterface.php
+      Registry.php
+      McpServerRuntime.php  // роутер JSON-RPC → провайдеры
+      // примерные реализации:
+      Tools/EchoTool.php
+      Prompts/ReleaseNotesPrompt.php
+      Resources/FsResourceProvider.php
+
+```
