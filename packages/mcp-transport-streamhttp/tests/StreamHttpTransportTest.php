@@ -36,7 +36,15 @@ JSON;
             'https://example.test/stream'
         );
 
-        $messages = iterator_to_array($transport->incoming());
+        $raw = iterator_to_array($transport->incoming());
+        $messages = [];
+        foreach ($raw as $entry) {
+            if (is_array($entry)) {
+                array_push($messages, ...$entry);
+            } else {
+                $messages[] = $entry;
+            }
+        }
 
         self::assertCount(2, $messages);
         self::assertSame('1', $messages[0]->id);
@@ -67,7 +75,15 @@ SSE;
             'https://example.test/stream'
         );
 
-        $messages = iterator_to_array($transport->incoming());
+        $raw = iterator_to_array($transport->incoming());
+        $messages = [];
+        foreach ($raw as $entry) {
+            if (is_array($entry)) {
+                array_push($messages, ...$entry);
+            } else {
+                $messages[] = $entry;
+            }
+        }
 
         self::assertCount(2, $messages);
         self::assertSame('11', $messages[0]->id);

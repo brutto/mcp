@@ -1,23 +1,21 @@
 #!/usr/bin/env php
 <?php
+declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
+
 use AntonBrutto\McpClient\McpClient;
 use AntonBrutto\McpTransportStdio\StdioTransport;
 use AntonBrutto\McpCore\Capabilities;
-$client = new McpClient(new StdioTransport());
+
+$in  = fopen('./.cache/mcp-test/out', 'r+'); // клиент читает то, что сервер ПИШЕТ
+$out = fopen('./.cache/mcp-test/in',  'r+'); // клиент пишет туда, где сервер ЧИТАЕТ
+
+$client = new McpClient(new StdioTransport($in, $out));
 $caps = $client->init(Capabilities::all());
+var_dump($caps);
+
 $tools = $client->listTools();
-$result = $client->callTool('echo', ['hello' => 'world']);
-echo json_encode([
-    'type' => 'summary',
-    'data' => [
-        'capabilities' => [
-            'tools' => $caps->tools,
-            'resources' => $caps->resources,
-            'prompts' => $caps->prompts,
-            'notifications' => $caps->notifications,
-        ],
-        'tools' => $tools,
-        'callResult' => $result,
-    ],
-], JSON_UNESCAPED_SLASHES) . "\n";
+var_dump($tools);
+
+$result = $client->callTool('echo', ['text' => 'Hello world']);
+var_dump($result);

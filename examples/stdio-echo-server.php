@@ -1,7 +1,9 @@
 #!/usr/bin/env php
 <?php
-// examples/server.php
-require __DIR__.'/../vendor/autoload.php';
+
+declare(strict_types=1);
+
+require __DIR__ . '/../vendor/autoload.php';
 
 use AntonBrutto\McpServer\{Registry, Server};
 use AntonBrutto\McpServer\Tools\EchoTool;
@@ -12,10 +14,14 @@ use AntonBrutto\McpTransportStdio\StdioTransport;
 $registry = new Registry();
 $registry->addTool(new EchoTool());
 $registry->addPrompt(new ReleaseNotesPrompt());
-$registry->addResource(new FsResource(__DIR__.'/../'));
+$registry->addResource(new FsResource(__DIR__ . '/../'));
 
 $server = new Server($registry);
-$transport = new StdioTransport();
+
+$in = fopen('./.cache/mcp-test/in', 'r+'); // сервер читает
+$out = fopen('./.cache/mcp-test/out', 'w+'); // сервер пишет
+
+$transport = new StdioTransport($in, $out);
 $transport->open();
 
 $running = true;
@@ -40,14 +46,23 @@ if (function_exists('pcntl_async_signals')) {
 }
 
 try {
-    foreach ($transport->incoming() as $msg) {
+    foreach ($transport->incoming() as $payload) {
         if (!$running) {
             break;
         }
         if ($signalSupport && function_exists('pcntl_signal_dispatch')) {
             pcntl_signal_dispatch();
         }
-        $resp = $server->handle($msg);
+
+        if (is_array($payload)) {
+            $responses = $server->handleBatch($payload);
+            if ($responses !== []) {
+                $transport->sendBatch($responses);
+            }
+            continue;
+        }
+
+        $resp = $server->handle($payload);
         if ($resp) {
             $transport->send($resp);
         }

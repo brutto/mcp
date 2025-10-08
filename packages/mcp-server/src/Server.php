@@ -44,6 +44,20 @@ final class Server
         };
     }
 
+    /** @param array<int,JsonRpcMessage> $messages */
+    public function handleBatch(array $messages): array
+    {
+        $responses = [];
+        foreach ($messages as $message) {
+            $response = $this->handle($message);
+            if ($response !== null) {
+                $responses[] = $response;
+            }
+        }
+
+        return $responses;
+    }
+
     private function capabilities(JsonRpcMessage $msg): JsonRpcMessage
     {
         $caps = [
@@ -79,15 +93,15 @@ final class Server
         $cacheItem = $this->resolveCacheItem($name, $key);
         if ($cacheItem !== null && $cacheItem->isHit()) {
             $this->logger->info('Returning cached tool result', [
-                'tool' => $name,
+                'tool'           => $name,
                 'idempotencyKey' => $key,
             ]);
 
-            return new JsonRpcMessage($msg->id, 'tools/call', [], ['result' => $cacheItem->get()]);
+            return new JsonRpcMessage($msg->id, 'tools/call', [], $cacheItem->get());
         }
 
         $this->logger->info('Invoking tool', [
-            'tool' => $name,
+            'tool'           => $name,
             'idempotencyKey' => $key,
         ]);
 
@@ -184,6 +198,7 @@ final class Server
         return new JsonRpcMessage($msg->id, 'resources/read', [], null,
             ['code' => 404, 'message' => "Resource '$uri' not found"]);
     }
+
     private function resolveCacheItem(string $tool, ?string $key): ?CacheItemInterface
     {
         if ($key === null || $key === '') {
@@ -213,19 +228,24 @@ final class Server
         }
     }
 
-    private function validationError(?string $id, string $method, string $subjectType, string $subjectName, SchemaValidationException $e): JsonRpcMessage
-    {
+    private function validationError(
+        ?string $id,
+        string $method,
+        string $subjectType,
+        string $subjectName,
+        SchemaValidationException $e
+    ): JsonRpcMessage {
         $this->logger->warning('Payload failed validation', [
             'subjectType' => $subjectType,
             'subjectName' => $subjectName,
-            'context' => $e->context,
-            'error' => $e->getMessage(),
+            'context'     => $e->context,
+            'error'       => $e->getMessage(),
         ]);
 
         return new JsonRpcMessage($id, $method, [], null, [
-            'code' => 422,
+            'code'    => 422,
             'message' => sprintf('Payload validation failed: %s', $e->getMessage()),
-            'data' => ['context' => $e->context, 'subjectType' => $subjectType, 'subjectName' => $subjectName],
+            'data'    => ['context' => $e->context, 'subjectType' => $subjectType, 'subjectName' => $subjectName],
         ]);
     }
 }

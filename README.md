@@ -22,15 +22,27 @@ docker run --rm \
   composer install --no-interaction --prefer-dist --optimize-autoloader
 ```
 
-Stdio run example
+Stdio server run example
 ```bash
 docker run --rm -i \                                                                                  127 ↵
   -v "$PWD":/work -w /work \
   php:8.4-cli php examples/stdio-echo-server.php
 ```
 
-## License
-MIT
+Stdio Server Test
+```bash
+echo '{"jsonrpc":"2.0","id":"2","method":"tools/call","params":{"name":"echo","arguments":{"text":"ping"}}}' \
+| docker run --rm -i -v "$PWD":/work -w /work php:8.4-cli \
+  php examples/stdio-echo-server.php
+```
+
+Stdio-транспорт поддерживает пакетную обработку только для однострочного формата
+
+```bash
+ printf '[{"jsonrpc":"2.0","id":"1","method":"mcp.init","params":{}},{"jsonrpc":"2.0","id":"2","method":"tools/list","params":{}},{"jsonrpc":"2.0","id":"3","method":"tools/call","params":{"name":"echo","arguments":{"text":"hi"}}}]' \
+| docker run --rm -i -v "$PWD":/work -w /work php:8.4-cli \
+  php examples/stdio-echo-server.php
+```
 
 ## MCP Inspector
 
@@ -40,3 +52,6 @@ docker run --rm \
   -p 6274:6274 -p 6277:6277 \
   ghcr.io/modelcontextprotocol/inspector:latest
 ```
+
+## License
+MIT

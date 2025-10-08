@@ -34,7 +34,9 @@
     "psr-4": {
       "AntonBrutto\\McpClientTests\\": "packages/mcp-client/tests/",
       "AntonBrutto\\McpServerTests\\": "packages/mcp-server/tests/",
-      "AntonBrutto\\McpTransportStreamHttpTests\\": "packages/mcp-transport-streamhttp/tests/"
+      "AntonBrutto\\McpTransportStdioTests\\": "packages/mcp-transport-stdio/tests/",
+      "AntonBrutto\\McpTransportStreamHttpTests\\": "packages/mcp-transport-streamhttp/tests/",
+      "AntonBrutto\\McpCodecJsonTests\\": "packages/mcp-codec-json/tests/"
     }
   },
   "repositories": [

@@ -42,13 +42,23 @@ final class StdioTransport implements TransportInterface
         $this->write($msg);
     }
 
+    public function sendBatch(array $messages): void
+    {
+        $this->ensureOpen();
+        if (!is_resource($this->out)) {
+            return;
+        }
+        fwrite($this->out, JsonCodec::encodeBatch($messages) . "\n");
+        fflush($this->out);
+    }
+
     public function cancel(string $id, string $method): void
     {
         $this->ensureOpen();
         $this->write(new JsonRpcMessage(null, 'mcp.cancel', ['id' => $id, 'method' => $method]));
     }
 
-    /** @return iterable<JsonRpcMessage> */
+    /** @return iterable<JsonRpcMessage|array<int,JsonRpcMessage>> */
     public function incoming(): iterable
     {
         $this->ensureOpen();
@@ -64,7 +74,13 @@ final class StdioTransport implements TransportInterface
                 continue;
             }
 
-            yield JsonCodec::decode($line);
+            $decoded = JsonCodec::decode($line);
+            if (is_array($decoded)) {
+                yield $decoded;
+                continue;
+            }
+
+            yield $decoded;
         }
     }
 

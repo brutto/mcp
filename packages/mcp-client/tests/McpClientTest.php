@@ -242,6 +242,16 @@ final class FakeTransport implements TransportInterface
         }
     }
 
+    public function sendBatch(array $messages): void
+    {
+        foreach ($messages as $msg) {
+            if (!$msg instanceof JsonRpcMessage) {
+                throw new RuntimeException('FakeTransport::sendBatch expects JsonRpcMessage instances');
+            }
+            $this->send($msg);
+        }
+    }
+
     public function cancel(string $id, string $method): void
     {
         $cancel = new JsonRpcMessage(null, 'mcp.cancel', ['id' => $id, 'method' => $method]);

@@ -16,5 +16,8 @@
         <testsuite name="mcp-transport-streamhttp">
             <directory>./packages/mcp-transport-streamhttp/tests</directory>
         </testsuite>
+        <testsuite name="mcp-codec-json">
+            <directory>./packages/mcp-codec-json/tests</directory>
+        </testsuite>
     </testsuites>
 </phpunit>

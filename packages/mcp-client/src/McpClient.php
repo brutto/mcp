@@ -197,9 +197,18 @@ final class McpClient implements ProtocolClientInterface
     {
         $processed = false;
 
-        foreach ($this->transport->incoming() as $message) {
+        foreach ($this->transport->incoming() as $payload) {
             $processed = true;
-            $this->dispatch($message);
+            if (is_array($payload)) {
+                foreach ($payload as $message) {
+                    $this->dispatchMessage($message);
+                    if ($target->isSettled()) {
+                        break;
+                    }
+                }
+            } else {
+                $this->dispatchMessage($payload);
+            }
 
             if ($target->isSettled()) {
                 break;
@@ -216,7 +225,7 @@ final class McpClient implements ProtocolClientInterface
         return $processed;
     }
 
-    private function dispatch(JsonRpcMessage $message): void
+    private function dispatchMessage(JsonRpcMessage $message): void
     {
         if ($message->id === null) {
             $this->handleNotification($message);

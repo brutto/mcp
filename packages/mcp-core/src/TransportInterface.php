@@ -11,10 +11,13 @@ interface TransportInterface
     /** Send a single JSON-RPC message to the server side. */
     public function send(JsonRpcMessage $msg): void;
 
+    /** @param array<int,JsonRpcMessage> $messages */
+    public function sendBatch(array $messages): void;
+
     /** Propagate a request cancellation to the server (mcp.cancel notification). */
     public function cancel(string $id, string $method): void;
 
-    /** @return iterable<JsonRpcMessage> */
+    /** @return iterable<JsonRpcMessage|array<int,JsonRpcMessage>> */
     public function incoming(): iterable;
 
     /** Close the connection and release transport resources. */

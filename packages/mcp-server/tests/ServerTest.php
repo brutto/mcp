@@ -38,8 +38,7 @@ final class ServerTest extends TestCase
 
         self::assertSame(1, $tool->invocations);
         self::assertSame(['value' => 42], $tool->lastArgs);
-        self::assertSame(['result' => ['value' => 42]], $responseA?->result);
-        self::assertSame(['result' => ['value' => 42]], $responseB?->result);
+        self::assertSame($responseA?->result, $responseB?->result);
 
         self::assertSame('Invoking tool', $logger->records[0]['message'] ?? null);
         self::assertSame('Returning cached tool result', $logger->records[1]['message'] ?? null);
@@ -108,6 +107,27 @@ final class ServerTest extends TestCase
             'message' => 'Payload validation failed: prompt args invalid',
             'data' => ['context' => 'stub.arguments', 'subjectType' => 'prompt', 'subjectName' => 'stub'],
         ], $response->error);
+    }
+
+    public function testHandleBatchAggregatesResponses(): void
+    {
+        $tool = new SpyTool();
+        $registry = new Registry();
+        $registry->addTool($tool);
+        $server = new Server($registry, new InMemoryCachePool(), new RecordingValidator(), new SpyLogger());
+
+        $messages = [
+            new JsonRpcMessage('1', 'tools/call', ['name' => 'spy', 'arguments' => ['value' => 1]]),
+            new JsonRpcMessage(null, 'notify', []),
+            new JsonRpcMessage('2', 'tools/call', ['name' => 'spy', 'arguments' => ['value' => 2]]),
+        ];
+
+        $responses = $server->handleBatch($messages);
+
+        self::assertCount(3, $responses);
+        self::assertSame('1', $responses[0]->id);
+        self::assertNull($responses[1]->id);
+        self::assertSame('2', $responses[2]->id);
     }
 }
 

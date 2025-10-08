@@ -9,6 +9,46 @@ final class JsonCodec
 {
     public static function encode(JsonRpcMessage $m): string
     {
+        $payload = self::messageToArray($m);
+        return json_encode($payload, JSON_UNESCAPED_SLASHES);
+    }
+
+    /** @param array<int,JsonRpcMessage> $messages */
+    public static function encodeBatch(array $messages): string
+    {
+        $payload = [];
+        foreach ($messages as $message) {
+            $payload[] = self::messageToArray($message);
+        }
+
+        return json_encode($payload, JSON_UNESCAPED_SLASHES);
+    }
+
+    /** @return JsonRpcMessage|array<int,JsonRpcMessage> */
+    public static function decode(string $json): JsonRpcMessage|array
+    {
+        $decoded = json_decode($json, true);
+        if (is_array($decoded) && array_is_list($decoded)) {
+            $messages = [];
+            foreach ($decoded as $offset => $item) {
+                if (!is_array($item)) {
+                    throw new \InvalidArgumentException('Batch entry at index ' . $offset . ' is not an object');
+                }
+                $messages[] = self::fromArray($item);
+            }
+
+            return $messages;
+        }
+
+        if (!is_array($decoded)) {
+            throw new \InvalidArgumentException('Invalid JSON-RPC payload');
+        }
+
+        return self::fromArray($decoded);
+    }
+
+    private static function messageToArray(JsonRpcMessage $m): array
+    {
         $payload = ['jsonrpc' => JsonRpcMessage::VERSION, 'method' => $m->method];
         if ($m->id !== null) {
             $payload['id'] = $m->id;
@@ -22,18 +62,17 @@ final class JsonCodec
         if ($m->error !== null) {
             $payload['error'] = $m->error;
         }
-        return json_encode($payload, JSON_UNESCAPED_SLASHES);
+        return $payload;
     }
 
-    public static function decode(string $json): JsonRpcMessage
+    private static function fromArray(array $data): JsonRpcMessage
     {
-        $d = json_decode($json, true);
         return new JsonRpcMessage(
-            $d['id'] ?? null,
-            $d['method'] ?? '',
-            $d['params'] ?? [],
-            $d['result'] ?? null,
-            $d['error'] ?? null
+            $data['id'] ?? null,
+            $data['method'] ?? '',
+            $data['params'] ?? [],
+            $data['result'] ?? null,
+            $data['error'] ?? null
         );
     }
 }

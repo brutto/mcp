@@ -39,12 +39,17 @@ final class StreamHttpTransport implements TransportInterface
         $this->dispatch($msg);
     }
 
+    public function sendBatch(array $messages): void
+    {
+        $this->dispatchBatch($messages);
+    }
+
     public function cancel(string $id, string $method): void
     {
         $this->dispatch(new JsonRpcMessage(null, 'mcp.cancel', ['id' => $id, 'method' => $method]));
     }
 
-    /** @return iterable<JsonRpcMessage> */
+    /** @return iterable<JsonRpcMessage|array<int,JsonRpcMessage>> */
     public function incoming(): iterable
     {
         $stream = $this->openStream();
@@ -95,7 +100,8 @@ final class StreamHttpTransport implements TransportInterface
                     continue;
                 }
 
-                yield JsonCodec::decode($line);
+                $decoded = JsonCodec::decode($line);
+                yield $decoded;
             }
         }
     }
@@ -113,6 +119,15 @@ final class StreamHttpTransport implements TransportInterface
         $req = $this->reqFactory->createRequest('POST', $this->endpoint)
             ->withHeader('Content-Type', 'application/json');
         $req->getBody()->write(JsonCodec::encode($msg));
+        $this->http->sendRequest($req);
+    }
+
+    /** @param array<int,JsonRpcMessage> $messages */
+    private function dispatchBatch(array $messages): void
+    {
+        $req = $this->reqFactory->createRequest('POST', $this->endpoint)
+            ->withHeader('Content-Type', 'application/json');
+        $req->getBody()->write(JsonCodec::encodeBatch($messages));
         $this->http->sendRequest($req);
     }
 
@@ -140,7 +155,7 @@ final class StreamHttpTransport implements TransportInterface
         return $this->stream;
     }
 
-    private function consumeEventBuffer(): ?JsonRpcMessage
+    private function consumeEventBuffer(): JsonRpcMessage|array|null
     {
         if ($this->eventBuffer === '') {
             return null;
