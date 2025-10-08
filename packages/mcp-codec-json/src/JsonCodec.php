@@ -10,7 +10,7 @@ final class JsonCodec
     public static function encode(JsonRpcMessage $m): string
     {
         $payload = self::messageToArray($m);
-        return json_encode($payload, JSON_UNESCAPED_SLASHES);
+        return json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     }
 
     /** @param array<int,JsonRpcMessage> $messages */
@@ -21,7 +21,9 @@ final class JsonCodec
             $payload[] = self::messageToArray($message);
         }
 
-        return json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $result = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        //var_dump($result);
+        return $result;
     }
 
     /** @return JsonRpcMessage|array<int,JsonRpcMessage> */

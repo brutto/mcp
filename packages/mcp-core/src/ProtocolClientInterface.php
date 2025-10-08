@@ -34,4 +34,12 @@ interface ProtocolClientInterface
 
     /** Fetch the contents of a resource by URI (resources/read). */
     public function readResource(string $uri, ?CancellationToken $cancel = null, ?float $timeoutSeconds = null): array;
+
+    /**
+     * Send multiple JSON-RPC calls in a single batch, returning responses keyed by input offset.
+     *
+     * @param array<int|string,array{method:string,params?:array<string,mixed>}> $batch
+     * @return array<int|string,JsonRpcMessage>
+     */
+    public function requestBatch(array $batch, ?CancellationToken $cancel = null, ?float $timeoutSeconds = null): array;
 }

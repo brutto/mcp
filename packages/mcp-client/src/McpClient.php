@@ -11,6 +11,7 @@ use AntonBrutto\McpCore\{Capabilities,
     ProtocolClientInterface,
     TransportInterface
 };
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -120,6 +121,89 @@ final class McpClient implements ProtocolClientInterface
         return $this->request('resources/read', ['uri' => $uri], $cancel, $timeoutSeconds);
     }
 
+    /**
+     * Dispatch multiple JSON-RPC calls as a batch and return their responses.
+     *
+     * @param array<int|string,array{method:string,params?:array<string,mixed>}> $batch
+     * @return array<int|string,JsonRpcMessage>
+     */
+    public function requestBatch(
+        array $batch,
+        ?CancellationToken $cancel = null,
+        ?float $timeoutSeconds = null
+    ): array {
+        if ($batch === []) {
+            return [];
+        }
+
+        if ($cancel?->isCancelled()) {
+            throw new CancellationException('Batch request was cancelled before dispatch.');
+        }
+
+        $deadline = $timeoutSeconds !== null ? microtime(true) + $timeoutSeconds : null;
+        $messages = [];
+        $entries = [];
+
+        foreach ($batch as $key => $item) {
+            if (!is_array($item)) {
+                throw new InvalidArgumentException('Each batch entry must be an array definition.');
+            }
+
+            $method = $item['method'] ?? null;
+            if (!is_string($method) || $method === '') {
+                throw new InvalidArgumentException('Batch entry requires a non-empty "method" field.');
+            }
+
+            $params = $item['params'] ?? [];
+            if (!is_array($params)) {
+                throw new InvalidArgumentException(sprintf(
+                    'Parameters for batch entry %s must be provided as an array.',
+                    (string)$key
+                ));
+            }
+
+            $id = $this->nextId();
+            $deferred = new Deferred(
+                $id,
+                $method,
+                $cancel,
+                $deadline,
+                fn() => $this->cancelRequest($id, $method)
+            );
+            $this->requests[$id] = $deferred;
+
+            if (isset($this->pending[$id])) {
+                $deferred->resolve($this->pending[$id]);
+                unset($this->pending[$id]);
+            }
+
+            $messages[] = new JsonRpcMessage($id, $method, $params);
+            $entries[] = ['key' => $key, 'id' => $id, 'deferred' => $deferred];
+        }
+
+        $cleanup = function () use ($entries): void {
+            foreach ($entries as $entry) {
+                unset($this->requests[$entry['id']]);
+            }
+        };
+
+        $responses = [];
+        try {
+            $this->transport->sendBatch($messages);
+
+            foreach ($entries as $entry) {
+                $responses[$entry['key']] = $this->await($entry['deferred']);
+            }
+        } catch (\Throwable $e) {
+            $cleanup();
+            throw $e;
+        }
+
+        $cleanup();
+
+        return $responses;
+    }
+
     private function nextId(): string
     {
         return (string)$this->nextId++;
@@ -202,9 +286,6 @@ final class McpClient implements ProtocolClientInterface
             if (is_array($payload)) {
                 foreach ($payload as $message) {
                     $this->dispatchMessage($message);
-                    if ($target->isSettled()) {
-                        break;
-                    }
                 }
             } else {
                 $this->dispatchMessage($payload);

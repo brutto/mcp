@@ -67,7 +67,7 @@ final class StreamHttpTransport implements TransportInterface
 
             $chunk = $stream->read(8192);
             if ($chunk === '') {
-                usleep(10_000);
+                usleep(10000);
                 continue;
             }
 

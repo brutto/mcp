@@ -185,6 +185,82 @@ final class McpClientTest extends TestCase
             ], $transport->sent[1]->params ?? []);
         }
     }
+
+    /**
+     * Ensures batching multiple RPCs returns structured responses keyed by input.
+     *
+     * @return void
+     */
+    public function testRequestBatchReturnsResponses(): void
+    {
+        $transport = new FakeTransport([
+            'tools/list' => static function (JsonRpcMessage $msg): array {
+                return [new JsonRpcMessage($msg->id, $msg->method, [], ['tools' => [['name' => 'echo']]])];
+            },
+            'prompts/list' => static function (JsonRpcMessage $msg): array {
+                return [new JsonRpcMessage($msg->id, $msg->method, [], ['prompts' => [['name' => 'releaseNotes']]])];
+            },
+        ]);
+
+        $client = new McpClient($transport);
+
+        $responses = $client->requestBatch([
+            'tools' => ['method' => 'tools/list'],
+            'prompts' => ['method' => 'prompts/list'],
+        ]);
+
+        self::assertArrayHasKey('tools', $responses);
+        self::assertArrayHasKey('prompts', $responses);
+        self::assertInstanceOf(JsonRpcMessage::class, $responses['tools']);
+        self::assertInstanceOf(JsonRpcMessage::class, $responses['prompts']);
+        self::assertSame(['tools' => [['name' => 'echo']]], $responses['tools']->result);
+        self::assertSame(['prompts' => [['name' => 'releaseNotes']]], $responses['prompts']->result);
+    }
+
+    /**
+     * Verifies batch input with invalid shape raises an exception before dispatch.
+     *
+     * @return void
+     */
+    public function testRequestBatchValidatesStructure(): void
+    {
+        $client = new McpClient(new FakeTransport());
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Batch entry requires a non-empty "method" field.');
+
+        $client->requestBatch([
+            ['params' => []],
+        ]);
+    }
+
+    /**
+     * Confirms batch keeps error payloads accessible to the caller.
+     *
+     * @return void
+     */
+    public function testRequestBatchReturnsErrorMessages(): void
+    {
+        $transport = new FakeTransport([
+            'tools/call' => static function (JsonRpcMessage $msg): array {
+                return [
+                    new JsonRpcMessage($msg->id, $msg->method, [], null, [
+                        'code' => 500,
+                        'message' => 'Internal failure',
+                    ]),
+                ];
+            },
+        ]);
+
+        $client = new McpClient($transport);
+
+        $responses = $client->requestBatch([
+            'call' => ['method' => 'tools/call', 'params' => ['name' => 'broken', 'arguments' => []]],
+        ]);
+
+        self::assertSame('tools/call', $responses['call']->method);
+        self::assertSame(500, $responses['call']->error['code'] ?? null);
+    }
 }
 
 final class SpyLogger extends AbstractLogger
@@ -207,7 +283,7 @@ final class FakeTransport implements TransportInterface
     /** @var array<string, callable(JsonRpcMessage): iterable<JsonRpcMessage>> */
     private array $handlers;
 
-    /** @var list<JsonRpcMessage> */
+    /** @var list<JsonRpcMessage|array<int,JsonRpcMessage>> */
     private array $queue = [];
 
     /** @var list<JsonRpcMessage> */
@@ -225,30 +301,28 @@ final class FakeTransport implements TransportInterface
     {
         $this->sent[] = $msg;
 
-        if (!isset($this->handlers[$msg->method])) {
-            return;
-        }
-
-        $responses = ($this->handlers[$msg->method])($msg);
-        if (!is_iterable($responses)) {
-            $responses = [$responses];
-        }
-
-        foreach ($responses as $response) {
-            if (!$response instanceof JsonRpcMessage) {
-                throw new RuntimeException('FakeTransport expects JsonRpcMessage instances');
-            }
+        foreach ($this->processMessage($msg) as $response) {
             $this->queue[] = $response;
         }
     }
 
     public function sendBatch(array $messages): void
     {
+        $batch = [];
+
         foreach ($messages as $msg) {
             if (!$msg instanceof JsonRpcMessage) {
                 throw new RuntimeException('FakeTransport::sendBatch expects JsonRpcMessage instances');
             }
-            $this->send($msg);
+            $this->sent[] = $msg;
+
+            foreach ($this->processMessage($msg) as $response) {
+                $batch[] = $response;
+            }
+        }
+
+        if ($batch !== []) {
+            $this->queue[] = $batch;
         }
     }
 
@@ -286,5 +360,28 @@ final class FakeTransport implements TransportInterface
     public function push(JsonRpcMessage $msg): void
     {
         $this->queue[] = $msg;
+    }
+
+    /** @return list<JsonRpcMessage> */
+    private function processMessage(JsonRpcMessage $msg): array
+    {
+        if (!isset($this->handlers[$msg->method])) {
+            return [];
+        }
+
+        $responses = ($this->handlers[$msg->method])($msg);
+        if (!is_iterable($responses)) {
+            $responses = [$responses];
+        }
+
+        $result = [];
+        foreach ($responses as $response) {
+            if (!$response instanceof JsonRpcMessage) {
+                throw new RuntimeException('FakeTransport expects JsonRpcMessage instances');
+            }
+            $result[] = $response;
+        }
+
+        return $result;
     }
 }

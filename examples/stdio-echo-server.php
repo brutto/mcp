@@ -20,8 +20,8 @@ $server = new Server($registry);
 
 $in = fopen('./.cache/mcp-test/in', 'r+'); // сервер читает
 $out = fopen('./.cache/mcp-test/out', 'w+'); // сервер пишет
-
 $transport = new StdioTransport($in, $out);
+//$transport = new StdioTransport();
 $transport->open();
 
 $running = true;
